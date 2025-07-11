@@ -19,6 +19,7 @@ const useFetch = <T>(fetchFunction: () => Promise<T>, autoFetch = true) => {
         } finally {
             setLoading(false);
         }
+    }
 
         const reset = () => {
             setData(null);
@@ -33,7 +34,6 @@ const useFetch = <T>(fetchFunction: () => Promise<T>, autoFetch = true) => {
         }, []);
 
         return { data, loading, error, refetch: fetchData, reset};
-    }
     
 }
 
