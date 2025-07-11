@@ -4,7 +4,7 @@ import { images } from "@/constants/images";
 import { fetchMovies } from "@/services/api";
 import useFetch from "@/services/useFetch";
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, Image, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Image, ScrollView, Text, View } from "react-native";
 
 export default function Index() {
   const router = useRouter();
@@ -43,6 +43,14 @@ export default function Index() {
 
               <>
                 <Text className="text-lg text-white font-bold mt-5 mb-3">Latest Movies</Text>
+
+                  <FlatList 
+                    data={movies} 
+                    renderItem={({item}) => (
+                      <Text className="text-white text-sm">{item.title}</Text>
+                    )}                    
+                  />
+
               </>
 
             </View>
