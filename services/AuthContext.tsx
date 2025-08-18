@@ -1,68 +1,53 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { Models } from "react-native-appwrite";
-import { createAccount, getCurrentUser, signIn, signOut } from './appwrite';
+import { createContext, useContext, useState } from "react";
+import { SafeAreaView, Text } from "react-native";
+import { account } from "../lib/appWriteConfig.js";
 
-export type User = Models.User<Models.Preferences>
-
-interface AuthContextType {
-    user: User | null
-    isLoading: boolean
-    login: (email: string, password: string) => Promise<void>
-    register: (email: string, password: string, name: string) => Promise<void>
-    logout: () => Promise<void>
+// 1. Define the 'shape' or type of your context's data
+export interface AuthContextType {
+  signin: (email: string, password: string) => Promise<void>;
+  // Add other values you'll provide, e.g., user, loading, etc.
+  loading: boolean;
+  user: any; // Replace 'any' with a proper user type if you have one
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+// 2. Create the context with the type and a default value of undefined
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const useAuth = () => {
-    const context = useContext(AuthContext)
-    if (!context) {
-        throw new Error('useAuth must be within AuthProvider')
-    }
-    return context
-}
+const AuthProvider = ({ children } : { children: React.ReactNode}) => {
+    const [loading, setLoading] = useState(false);
+    const [session, setSession] = useState(false);
+    const [user, setUser] = useState(false);
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-    const [user, setUser] = useState<User | null>(null)
-    const [isLoading, setIsLoading] = useState(true)
-
-    // Check authentication state on app start
-    useEffect(() => {
-        checkAuthState()
-    }, [])
-
-    const checkAuthState = async () => {
+    const signin = async ( {email, password} : {email: string, password: string} ) => {
+        setLoading(true)
         try {
-            const currentUser = await getCurrentUser()
-            setUser(currentUser)
+            const responseSession = await account.createEmailPasswordSession(
+                email,
+                password
+            )
         } catch (error) {
-            setUser(null)
-        } finally {
-            setIsLoading(false)
+            console.log(error)
         }
-    }
+    };
+    const signout = async () => {};
 
-    const login = async (email: string, password: string) => {
-        await signIn(email, password)
-        const currentUser = await getCurrentUser()
-        setUser(currentUser)
-    }
-
-    const register = async (email: string, password: string, name: string) => {
-        await createAccount(email, password, name)
-        await login(email, password)
-    }
-
-    const logout = async () => {
-        await signOut()
-        setUser(null)
-    }
-
+    const contextData = { session, user, signin, signout };
     return (
-        <AuthContext.Provider value={{ user, isLoading, login, register, logout }}> 
-            {children}
+        <AuthContext.Provider value={contextData}>
+            {loading ? (
+                <SafeAreaView>
+                    <Text>Loading..</Text>
+                </SafeAreaView>
+            ) : (
+                children
+            )}
         </AuthContext.Provider>
-    )
+    );
+};
 
+const useAuth = () => {
+    return useContext(AuthContext);
+};
 
-}
+export { AuthContext, AuthProvider, useAuth };
+
