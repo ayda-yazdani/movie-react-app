@@ -1,16 +1,25 @@
 // track the searches made by a user
 
 import { Account, Client, Databases, ID, Query } from "react-native-appwrite"
+import { Platform } from "react-native"
 
 const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!
 const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION_ID!
 
 const client = new Client()
-    .setEndpoint('https://fra.cloud.appwrite.io/v1')
+    .setEndpoint(process.env.EXPO_PUBLIC_APPWRITE_ENDPOINT!)
     .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!)
 
-const database = new Databases(client)
+switch(Platform.OS){
+    case 'ios':
+        client.setPlatform(process.env.EXPO_PUBLIC_APPWRITE_BUNDLE_ID!)
+        break
+    case 'android':
+        client.setPlatform(process.env.EXPO_PUBLIC_APPWRITE_PACKAGE_NAME!)
+        break
+}
 
+const database = new Databases(client)
 const account = new Account(client)
 
 export const createAccount = async (email: string, password: string, name: string) => {
@@ -35,10 +44,12 @@ export const signIn = async (email: string, password: string) => {
 
 export const getCurrentUser = async() => {
     try {
+        console.log("appwrite.ts: Calling account.get()");
         const currentUser = await account.get()
+        console.log("appwrite.ts: account.get() success:", { user: !!currentUser, email: currentUser?.email });
         return currentUser
     } catch (error) {
-        console.log(error)
+        console.log("appwrite.ts: account.get() error:", error);
         return null
     }
 }

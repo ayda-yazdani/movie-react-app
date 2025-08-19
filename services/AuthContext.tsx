@@ -1,52 +1,125 @@
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 import { SafeAreaView, Text } from "react-native";
-import { account } from "../lib/appWriteConfig.js";
+import { createAccount, signIn, getCurrentUser, signOut } from "./appwrite";
 
-// 1. Define the 'shape' or type of your context's data
 export interface AuthContextType {
   signin: (email: string, password: string) => Promise<void>;
-  // Add other values you'll provide, e.g., user, loading, etc.
-  loading: boolean;
-  user: any; // Replace 'any' with a proper user type if you have one
+  signup: (email: string, password: string, name: string) => Promise<void>;
+  signout: () => Promise<void>;
+  refreshAuthState: () => Promise<void>;
+  isLoading: boolean;
+  user: any;
 }
 
-// 2. Create the context with the type and a default value of undefined
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AuthProvider = ({ children } : { children: React.ReactNode}) => {
-    const [loading, setLoading] = useState(false);
-    const [session, setSession] = useState(false);
-    const [user, setUser] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
+    const [user, setUser] = useState(null);
 
-    const signin = async ( {email, password} : {email: string, password: string} ) => {
-        setLoading(true)
+    // Check for existing session on app startup
+    useEffect(() => {
+        checkCurrentUser();
+    }, []);
+
+    const checkCurrentUser = async () => {
         try {
-            const responseSession = await account.createEmailPasswordSession(
-                email,
-                password
-            )
+            console.log("AuthContext: Checking for existing user...");
+            setIsLoading(true);
+            const currentUser = await getCurrentUser();
+            console.log("AuthContext: getCurrentUser result:", { user: !!currentUser, email: currentUser?.email });
+            if (currentUser) {
+                setUser(currentUser);
+                console.log("AuthContext: User found, setting as logged in");
+            } else {
+                setUser(null);
+                console.log("AuthContext: No user found, setting as logged out");
+            }
         } catch (error) {
-            console.log(error)
+            console.log("AuthContext: Error checking user:", error);
+            setUser(null);
+        } finally {
+            console.log("AuthContext: Setting isLoading to false");
+            setIsLoading(false);
         }
     };
-    const signout = async () => {};
 
-    const contextData = { session, user, signin, signout };
+    // Expose checkCurrentUser for manual refresh
+    const refreshAuthState = checkCurrentUser;
+
+    const signin = async (email: string, password: string) => {
+        try {
+            console.log("AuthContext: Attempting signin...");
+            const session = await signIn(email, password);
+            console.log("AuthContext: signIn successful, session created:", !!session);
+            
+            // Refresh the auth state to detect the new session
+            console.log("AuthContext: Refreshing auth state after successful signin");
+            await checkCurrentUser();
+            
+            console.log("AuthContext: Signin complete, auth state refreshed");
+        } catch (error) {
+            console.log("AuthContext: Sign in error:", error);
+            setUser(null);
+            throw error;
+        }
+    };
+
+    const signup = async (email: string, password: string, name: string) => {
+        try {
+            console.log("AuthContext: Attempting signup...");
+            await createAccount(email, password, name);
+            console.log("AuthContext: Account created, signing in...");
+            await signIn(email, password);
+            console.log("AuthContext: Signed in after signup, refreshing auth state");
+            await checkCurrentUser();
+            console.log("AuthContext: Signup complete, auth state refreshed");
+        } catch (error) {
+            console.log("AuthContext: Sign up error:", error);
+            setUser(null);
+            throw error;
+        }
+    };
+
+    const logout = async () => {
+        setIsLoading(true);
+        try {
+            console.log("AuthContext: Attempting signout...");
+            await signOut();
+            console.log("AuthContext: Signout successful");
+            setUser(null);
+        } catch (error) {
+            console.log("AuthContext: Sign out error:", error);
+            // Even if signout fails, clear the local user state
+            setUser(null);
+            // Don't throw error, as we still want to clear local state
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const contextData = { 
+        signin, 
+        signup, 
+        signout: logout,
+        refreshAuthState,
+        isLoading, 
+        user 
+    };
+
     return (
         <AuthContext.Provider value={contextData}>
-            {loading ? (
-                <SafeAreaView>
-                    <Text>Loading..</Text>
-                </SafeAreaView>
-            ) : (
-                children
-            )}
+            {children}
         </AuthContext.Provider>
     );
 };
 
 const useAuth = () => {
-    return useContext(AuthContext);
+    const context = useContext(AuthContext);
+    if (context === undefined) {
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
 };
 
 export { AuthContext, AuthProvider, useAuth };
