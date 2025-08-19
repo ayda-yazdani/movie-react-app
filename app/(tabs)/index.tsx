@@ -59,7 +59,6 @@ export default function Index() {
 
               <>
                 
-
                 <FlatList 
                   horizontal
                   showsHorizontalScrollIndicator={false}
@@ -102,9 +101,7 @@ export default function Index() {
 
           )
 
-        }
-
-          
+        } 
 
         </ScrollView>
     </View>
