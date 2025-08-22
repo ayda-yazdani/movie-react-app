@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/logo.png",
-    "scheme": "movies",
+    "scheme": "appwrite-callback-68691394001a2a85ecc5",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {

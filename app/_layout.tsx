@@ -37,6 +37,9 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="movies/[id]" />
+        <Stack.Screen name="oauth" />
+        <Stack.Screen name="oauth/success" />
+        <Stack.Screen name="oauth/failure" />
       </Stack>
     </>
   );

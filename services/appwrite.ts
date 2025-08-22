@@ -1,7 +1,9 @@
 // track the searches made by a user
 
-import { Account, Client, Databases, ID, Query } from "react-native-appwrite"
-import { Platform } from "react-native"
+import { Account, Client, Databases, ID, Query, OAuthProvider } from "react-native-appwrite"
+import { Platform, Linking } from "react-native"
+import * as WebBrowser from 'expo-web-browser'
+import { makeRedirectUri } from 'expo-auth-session'
 
 const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!
 const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION_ID!
@@ -114,5 +116,79 @@ export const getTrendingMovies = async(): Promise<TrendingMovie[] | undefined> =
     } catch(error) {
         console.log(error)
         return undefined
+    }
+}
+
+export const signInWithGoogle = async () => {
+    try {
+        console.log("appwrite.ts: Initiating Google OAuth following Appwrite documentation...");
+        
+        // Create deep link that works across Expo environments (Appwrite official pattern)
+        const deepLink = new URL(makeRedirectUri({ preferLocalhost: true }));
+        const scheme = `${deepLink.protocol}//`; // e.g. 'exp://' or 'appwrite-callback-<PROJECT_ID>://'
+        
+        console.log("appwrite.ts: Deep link:", deepLink.toString());
+        console.log("appwrite.ts: Scheme:", scheme);
+        
+        // Start OAuth flow (Appwrite official pattern)
+        const loginUrl = await account.createOAuth2Token(
+            OAuthProvider.Google,
+            `${deepLink}`, // success URL
+            `${deepLink}`  // failure URL
+        );
+        
+        console.log("appwrite.ts: Opening login URL:", loginUrl.toString());
+        
+        // Open login URL in browser (Appwrite official pattern)
+        const result = await WebBrowser.openAuthSessionAsync(
+            `${loginUrl}`, 
+            scheme,
+            {
+                showTitle: false,
+                toolbarColor: '#1a1a1a',
+                controlsColor: '#ffffff',
+            }
+        );
+        
+        console.log("appwrite.ts: WebBrowser result:", result);
+        
+        if (result.type === 'cancel') {
+            throw new Error('OAuth cancelled by user');
+        }
+        
+        if (result.type === 'success' && result.url) {
+            console.log("appwrite.ts: Processing OAuth success URL:", result.url);
+            
+            // Extract credentials from OAuth redirect URL (Appwrite official pattern)
+            const url = new URL(result.url);
+            const secret = url.searchParams.get('secret');
+            const userId = url.searchParams.get('userId');
+            
+            console.log("appwrite.ts: OAuth parameters:", { userId: !!userId, secret: !!secret });
+            
+            if (userId && secret) {
+                // Create session with OAuth credentials (Appwrite official pattern)
+                console.log("appwrite.ts: Creating session with OAuth credentials...");
+                const session = await account.createSession(userId, secret);
+                console.log("appwrite.ts: Session created successfully:", !!session);
+                
+                // Get the current user to confirm authentication
+                const currentUser = await getCurrentUser();
+                if (currentUser) {
+                    console.log("appwrite.ts: OAuth successful, user session found");
+                    return { type: 'success', user: currentUser };
+                } else {
+                    throw new Error('Session created but user not found');
+                }
+            } else {
+                throw new Error('OAuth parameters not found in redirect URL');
+            }
+        } else {
+            throw new Error('OAuth flow did not complete successfully');
+        }
+        
+    } catch (error) {
+        console.log("appwrite.ts: Google OAuth error:", error);
+        throw error;
     }
 }

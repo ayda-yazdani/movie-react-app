@@ -1,10 +1,11 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { SafeAreaView, Text } from "react-native";
-import { createAccount, signIn, getCurrentUser, signOut } from "./appwrite";
+import { createAccount, signIn, getCurrentUser, signOut, signInWithGoogle } from "./appwrite";
 
 export interface AuthContextType {
   signin: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, name: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signout: () => Promise<void>;
   refreshAuthState: () => Promise<void>;
   isLoading: boolean;
@@ -81,6 +82,24 @@ const AuthProvider = ({ children } : { children: React.ReactNode}) => {
         }
     };
 
+    const googleSignIn = async () => {
+        try {
+            console.log("AuthContext: Attempting Google sign in...");
+            const result = await signInWithGoogle();
+            console.log("AuthContext: Google OAuth result:", result);
+            
+            // The signInWithGoogle function now handles session checking internally
+            // If we get here without an error, the user should be logged in
+            console.log("AuthContext: OAuth completed, refreshing auth state");
+            await checkCurrentUser();
+            console.log("AuthContext: Auth state refreshed after Google OAuth");
+        } catch (error) {
+            console.log("AuthContext: Google sign in error:", error);
+            setUser(null);
+            throw error;
+        }
+    };
+
     const logout = async () => {
         setIsLoading(true);
         try {
@@ -101,6 +120,7 @@ const AuthProvider = ({ children } : { children: React.ReactNode}) => {
     const contextData = { 
         signin, 
         signup, 
+        signInWithGoogle: googleSignIn,
         signout: logout,
         refreshAuthState,
         isLoading, 

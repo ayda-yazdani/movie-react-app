@@ -2,13 +2,14 @@ import { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, Alert } from "react-native";
 import { Link } from "expo-router";
 import { useAuth } from "@/services/AuthContext";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 
 export default function SignUp() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const { signup, isLoading } = useAuth();
+  const { signup, signInWithGoogle, isLoading } = useAuth();
 
   const handleSignUp = async () => {
     if (!name || !email || !password || !confirmPassword) {
@@ -33,11 +34,32 @@ export default function SignUp() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (error: any) {
+      Alert.alert("Google Sign In Failed", error.message || "An error occurred");
+    }
+  };
+
   return (
     <View className="flex-1 bg-primary px-6 justify-center">
       <Text className="text-white text-3xl font-bold mb-8 text-center">
         Sign Up
       </Text>
+
+      {/* Google Sign In Button */}
+      <GoogleSignInButton 
+        onPress={handleGoogleSignIn}
+        disabled={isLoading}
+      />
+
+      {/* Divider */}
+      <View className="flex-row items-center my-6">
+        <View className="flex-1 h-px bg-gray-600" />
+        <Text className="text-gray-400 mx-4">or</Text>
+        <View className="flex-1 h-px bg-gray-600" />
+      </View>
 
       <View className="space-y-4">
         <View>
