@@ -48,11 +48,120 @@ export const getCurrentUser = async() => {
     try {
         console.log("appwrite.ts: Calling account.get()");
         const currentUser = await account.get()
-        console.log("appwrite.ts: account.get() success:", { user: !!currentUser, email: currentUser?.email });
+        console.log("appwrite.ts: account.get() success:", { 
+            user: !!currentUser, 
+            email: currentUser?.email,
+            name: currentUser?.name,
+            prefs: currentUser?.prefs 
+        });
         return currentUser
     } catch (error) {
         console.log("appwrite.ts: account.get() error:", error);
         return null
+    }
+}
+
+export const getCurrentSession = async() => {
+    try {
+        console.log("appwrite.ts: Getting current session...");
+        const session = await account.getSession('current');
+        console.log("appwrite.ts: Full session object:", JSON.stringify(session, null, 2));
+        console.log("appwrite.ts: Session info:", {
+            provider: session?.provider,
+            providerUid: session?.providerUid,
+            hasAccessToken: !!session?.providerAccessToken,
+            accessToken: session?.providerAccessToken ? "***PRESENT***" : "NOT_PRESENT",
+            allKeys: Object.keys(session || {})
+        });
+        return session;
+    } catch (error) {
+        console.log("appwrite.ts: Error getting session:", error);
+        return null;
+    }
+}
+
+export const getGoogleProfile = async (accessToken: string) => {
+    try {
+        console.log("appwrite.ts: Fetching Google profile...");
+        const response = await fetch(`https://www.googleapis.com/oauth2/v2/userinfo?access_token=${accessToken}`);
+        const profile = await response.json();
+        console.log("appwrite.ts: Google profile:", {
+            hasName: !!profile?.name,
+            hasAvatar: !!profile?.picture,
+            email: profile?.email
+        });
+        return profile;
+    } catch (error) {
+        console.log("appwrite.ts: Error fetching Google profile:", error);
+        return null;
+    }
+}
+
+export const getUserIdentities = async () => {
+    try {
+        console.log("appwrite.ts: Fetching user identities...");
+        const identities = await account.listIdentities();
+        console.log("appwrite.ts: User identities:", JSON.stringify(identities, null, 2));
+        return identities;
+    } catch (error) {
+        console.log("appwrite.ts: Error fetching identities:", error);
+        return null;
+    }
+}
+
+export const isTokenExpired = (expiryDateString: string): boolean => {
+    if (!expiryDateString) return true;
+    
+    const expiryDate = new Date(expiryDateString);
+    const now = new Date();
+    const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes buffer
+    
+    return expiryDate <= fiveMinutesFromNow;
+}
+
+export const refreshOAuthSession = async (sessionId: string = 'current') => {
+    try {
+        console.log("appwrite.ts: Refreshing OAuth session...");
+        const updatedSession = await account.updateSession(sessionId);
+        console.log("appwrite.ts: OAuth session refreshed successfully");
+        return updatedSession;
+    } catch (error) {
+        console.log("appwrite.ts: Error refreshing OAuth session:", error);
+        throw error;
+    }
+}
+
+export const checkAndRefreshOAuthTokens = async () => {
+    try {
+        console.log("appwrite.ts: Checking OAuth token expiry...");
+        const identities = await getUserIdentities();
+        
+        if (identities && identities.identities) {
+            const googleIdentity = identities.identities.find((identity: any) => 
+                identity.provider?.toLowerCase().includes('google')
+            );
+            
+            if (googleIdentity && googleIdentity.providerAccessTokenExpiry) {
+                const isExpired = isTokenExpired(googleIdentity.providerAccessTokenExpiry);
+                console.log("appwrite.ts: Token status:", {
+                    expiry: googleIdentity.providerAccessTokenExpiry,
+                    isExpired,
+                    timeUntilExpiry: new Date(googleIdentity.providerAccessTokenExpiry).getTime() - Date.now()
+                });
+                
+                if (isExpired) {
+                    console.log("appwrite.ts: Token expired or expiring soon, refreshing...");
+                    await refreshOAuthSession();
+                    console.log("appwrite.ts: Token refresh completed");
+                    return true; // Token was refreshed
+                }
+            }
+        }
+        
+        return false; // No refresh needed
+    } catch (error) {
+        console.log("appwrite.ts: Error checking/refreshing OAuth tokens:", error);
+        return false;
     }
 }
 

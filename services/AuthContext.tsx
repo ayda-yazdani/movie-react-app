@@ -1,6 +1,5 @@
-import { createContext, useContext, useState, useEffect } from "react";
-import { SafeAreaView, Text } from "react-native";
-import { createAccount, signIn, getCurrentUser, signOut, signInWithGoogle } from "./appwrite";
+import { createContext, useContext, useEffect, useState } from "react";
+import { checkAndRefreshOAuthTokens, createAccount, getCurrentSession, getCurrentUser, getGoogleProfile, getUserIdentities, signIn, signInWithGoogle, signOut } from "./appwrite";
 
 export interface AuthContextType {
   signin: (email: string, password: string) => Promise<void>;
@@ -10,13 +9,19 @@ export interface AuthContextType {
   refreshAuthState: () => Promise<void>;
   isLoading: boolean;
   user: any;
+  userProfile: {
+    name: string;
+    email: string;
+    avatar?: string;
+  } | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const AuthProvider = ({ children } : { children: React.ReactNode}) => {
     const [isLoading, setIsLoading] = useState(true);
-    const [user, setUser] = useState(null);
+    const [user, setUser] = useState<any>(null);
+    const [userProfile, setUserProfile] = useState<{name: string; email: string; avatar?: string} | null>(null);
 
     // Check for existing session on app startup
     useEffect(() => {
@@ -27,21 +32,114 @@ const AuthProvider = ({ children } : { children: React.ReactNode}) => {
         try {
             console.log("AuthContext: Checking for existing user...");
             setIsLoading(true);
+            
+            // First check and refresh OAuth tokens if needed
+            const tokenWasRefreshed = await checkAndRefreshOAuthTokens();
+            if (tokenWasRefreshed) {
+                console.log("AuthContext: OAuth tokens were refreshed");
+            }
+            
             const currentUser = await getCurrentUser();
             console.log("AuthContext: getCurrentUser result:", { user: !!currentUser, email: currentUser?.email });
+            
             if (currentUser) {
                 setUser(currentUser);
+                console.log("AuthContext: User found, fetching profile info...");
+                
+                // Fetch enhanced profile info (will get fresh tokens if they were refreshed)
+                await fetchUserProfile(currentUser);
+                
                 console.log("AuthContext: User found, setting as logged in");
             } else {
                 setUser(null);
+                setUserProfile(null);
                 console.log("AuthContext: No user found, setting as logged out");
             }
         } catch (error) {
             console.log("AuthContext: Error checking user:", error);
             setUser(null);
+            setUserProfile(null);
         } finally {
             console.log("AuthContext: Setting isLoading to false");
             setIsLoading(false);
+        }
+    };
+
+    const fetchUserProfile = async (currentUser: any) => {
+        try {
+            // Start with basic user info from Appwrite
+            const profile = {
+                name: currentUser.name || 'User',
+                email: currentUser.email || '',
+                avatar: undefined as string | undefined
+            };
+
+            // Try to get session info to check for OAuth provider
+            const session = await getCurrentSession();
+            
+            if (session && session.providerAccessToken && 
+                (session.provider === 'google' || session.provider?.toLowerCase().includes('google'))) {
+                console.log("AuthContext: Fetching Google profile info...");
+                const googleProfile = await getGoogleProfile(session.providerAccessToken);
+                
+                if (googleProfile) {
+                    profile.name = googleProfile.name || profile.name;
+                    profile.avatar = googleProfile.picture;
+                    console.log("AuthContext: Google profile fetched successfully");
+                }
+            } else if (session && session.provider === 'oauth2') {
+                console.log("AuthContext: OAuth session detected, checking user identities...");
+                // Try to get profile info from identities since session access token isn't available
+                const identities = await getUserIdentities();
+                
+                // Look for Google identity that might have profile info
+                if (identities && identities.identities) {
+                    const googleIdentity = identities.identities.find((identity: any) => 
+                        identity.provider?.toLowerCase().includes('google')
+                    );
+                    
+                    if (googleIdentity) {
+                        console.log("AuthContext: Found Google identity:", {
+                            provider: googleIdentity.provider,
+                            hasAccessToken: !!googleIdentity.providerAccessToken,
+                            tokenExpiry: googleIdentity.providerAccessTokenExpiry
+                        });
+                        
+                        // Use the access token from identity to fetch Google profile
+                        if (googleIdentity.providerAccessToken) {
+                            console.log("AuthContext: Using Google identity access token to fetch profile...");
+                            const googleProfile = await getGoogleProfile(googleIdentity.providerAccessToken);
+                            
+                            if (googleProfile) {
+                                profile.name = googleProfile.name || profile.name;
+                                profile.avatar = googleProfile.picture;
+                                console.log("AuthContext: Google profile fetched successfully from identity token:", {
+                                    hasName: !!googleProfile.name,
+                                    hasAvatar: !!googleProfile.picture
+                                });
+                            }
+                        }
+                    }
+                }
+            } else {
+                console.log("AuthContext: No OAuth session found, using basic profile only");
+            }
+
+            console.log("AuthContext: Setting user profile:", {
+                hasName: !!profile.name,
+                hasEmail: !!profile.email,
+                hasAvatar: !!profile.avatar
+            });
+            
+            setUserProfile(profile);
+        } catch (error) {
+            console.log("AuthContext: Error fetching user profile:", error);
+            // Fallback to basic profile
+            setUserProfile({
+                name: currentUser.name || 'User',
+                email: currentUser.email || '',
+                avatar: undefined
+            });
         }
     };
 
@@ -124,7 +222,8 @@ const AuthProvider = ({ children } : { children: React.ReactNode}) => {
         signout: logout,
         refreshAuthState,
         isLoading, 
-        user 
+        user,
+        userProfile 
     };
 
     return (
